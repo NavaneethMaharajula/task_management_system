@@ -6,10 +6,28 @@ import './Home.css';
 
 const Home = () => {
 	const [data, setData] = useState([]);
+	const [loading, setLoading] = useState(true);
+
 	// loading the data from the mysql database
 	const loadData = async () => {
-		const response = await axios.get('http://localhost:5000/api/get');
-		setData(response.data);
+		try {
+			setLoading(true);
+			const response = await axios.get('http://localhost:5000/api/get');
+			if (Array.isArray(response.data)) {
+				setData(response.data);
+			} else if (response.data && Array.isArray(response.data.tasks)) {
+				setData(response.data.tasks);
+			} else {
+				console.error('API returned non-array:', response.data);
+				setData([]);
+			}
+		} catch (error) {
+			console.error('Error fetching data:', error);
+			toast.error('Failed to load tasks from server');
+			setData([]);
+		} finally {
+			setLoading(false);
+		}
 	};
 
 	useEffect(() => {
@@ -29,15 +47,22 @@ const Home = () => {
 			toast.error('Failed to update task');
 		}
 	};
+
 	// Function to delete a task
 	const deleteTask = (id) => {
 		if (window.confirm('Are you sure you want to delete this task?')) {
-			axios.delete(`http://localhost:5000/api/remove/${id}`);
-
-			toast.success('Task deleted successfully');
-			setTimeout(() => loadData(), 500); // Reload data after deleting
+			axios.delete(`http://localhost:5000/api/remove/${id}`)
+				.then(() => {
+					toast.success('Task deleted successfully');
+					loadData(); // Reload data after deleting
+				})
+				.catch((error) => {
+					console.error('Error deleting task:', error);
+					toast.error('Failed to delete task');
+				});
 		}
 	};
+
 	return (
 		<div style={{ marginTop: '150px' }}>
 			{/* Link to addTask page */}
@@ -56,38 +81,48 @@ const Home = () => {
 					</tr>
 				</thead>
 				<tbody>
-					{data.map((item, index) => {
-						return (
-							<tr key={item.id}>
-								<th scope='row'>{index + 1}</th>
-								<td>{item.title}</td>
-								<td>{item.description}</td>
-								<td>
-									{/* Checkbox to mark task as completed */}
-									<input
-										type='checkbox'
-										checked={item.completed === 1}
-										onChange={() =>
-											handleCheckboxChange(item.id, item.completed)
-										}
-									/>
-								</td>
-								<td>
-									{/* Link to updateTask page */}
-									<Link to={`/updateTask/${item.id}`}>
-										<button className='btn btn-edit'>Edit</button>
-									</Link>
-									{/* Button to delete a task */}
-									<button
-										className='btn btn-delete'
-										onClick={() => deleteTask(item.id)}
-									>
-										Delete
-									</button>
-								</td>
-							</tr>
-						);
-					})}
+					{loading ? (
+						<tr>
+							<td colSpan="5" style={{ textAlign: 'center' }}>Loading tasks...</td>
+						</tr>
+					) : (Array.isArray(data) ? data : []).length === 0 ? (
+						<tr>
+							<td colSpan="5" style={{ textAlign: 'center' }}>No tasks found</td>
+						</tr>
+					) : (
+						(Array.isArray(data) ? data : []).map((item, index) => {
+							return (
+								<tr key={item.id}>
+									<th scope='row'>{index + 1}</th>
+									<td>{item.title}</td>
+									<td>{item.description}</td>
+									<td>
+										{/* Checkbox to mark task as completed */}
+										<input
+											type='checkbox'
+											checked={item.completed === 1}
+											onChange={() =>
+												handleCheckboxChange(item.id, item.completed)
+											}
+										/>
+									</td>
+									<td>
+										{/* Link to updateTask page */}
+										<Link to={`/updateTask/${item.id}`}>
+											<button className='btn btn-edit'>Edit</button>
+										</Link>
+										{/* Button to delete a task */}
+										<button
+											className='btn btn-delete'
+											onClick={() => deleteTask(item.id)}
+										>
+											Delete
+										</button>
+									</td>
+								</tr>
+							);
+						})
+					)}
 				</tbody>
 			</table>
 		</div>

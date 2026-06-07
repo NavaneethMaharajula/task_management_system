@@ -1,16 +1,23 @@
 const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
-const mysql = require('mysql2');
+const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 
-// Created a connection to the mysql database
-const db = mysql.createPool({
-	host: 'localhost',
-	user: 'root',
-	password: 'password',
-	database: 'task_management',
-	port: 3306,
+// Create a connection to the SQLite database
+const db = new sqlite3.Database('./database.sqlite', (err) => {
+    if (err) {
+        console.error('Error connecting to SQLite:', err.message);
+    } else {
+        console.log('Connected to the SQLite database.');
+        // Create the tasks table if it doesn't exist
+        db.run(`CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            completed INTEGER DEFAULT 0
+        )`);
+    }
 });
 
 app.use(cors());
@@ -18,85 +25,97 @@ app.use(express.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // API Endpoints
+
 // to get all the tasks
 app.get('/api/get', (req, res) => {
 	const sqlGet = 'SELECT * FROM tasks';
-	db.query(sqlGet, (error, result) => {
-		res.send(result);
+	db.all(sqlGet, [], (error, result) => {
+        if (error) {
+            res.status(500).json({ error: 'Internal server error' });
+        } else {
+		    res.send(result);
+        }
 	});
 });
+
 // to add a new task
 app.post('/api/post', (req, res) => {
 	const { title, description } = req.body;
-	const completed = req.body.completed || 0; // Default completed to 0 if not provided
+	const completed = req.body.completed || 0; 
 	const sqlInsert =
 		'INSERT INTO tasks (title, description, completed) VALUES (?, ?, ?)';
-	db.query(sqlInsert, [title, description, completed], (error, result) => {
+	db.run(sqlInsert, [title, description, completed], function(error) {
 		if (error) {
 			res.status(500).json({ error: 'Internal server error' });
-		}
+		} else {
+            res.send({ id: this.lastID, title, description, completed });
+        }
 	});
 });
+
 // to remove a task
 app.delete('/api/remove/:id', (req, res) => {
 	const { id } = req.params;
-	const completed = req.body.completed || 0; // Default completed to 0 if not provided
 	const sqlRemove = 'DELETE FROM tasks WHERE id = ?';
-	db.query(sqlRemove, id, (error, result) => {
+	db.run(sqlRemove, id, function(error) {
 		if (error) {
 			console.log(error);
-		}
+            res.status(500).json({ error: 'Internal server error' });
+		} else {
+            res.send({ success: true });
+        }
 	});
 });
+
 // to get a task by id
 app.get('/api/get/:id', (req, res) => {
 	const { id } = req.params;
 	const sqlGet = 'SELECT * FROM tasks where id = ?';
-	db.query(sqlGet, id, (error, result) => {
+	db.get(sqlGet, id, (error, result) => {
 		if (error) {
 			console.log(error);
-		}
-		res.send(result);
+            res.status(500).json({ error: 'Internal server error' });
+		} else {
+		    res.send([result]); // send as array to match original behavior
+        }
 	});
 });
+
 // to update a task
 app.put('/api/update/:id', (req, res) => {
 	const { id } = req.params;
 	const { title, description, completed } = req.body;
 	const sqlUpdate =
 		'UPDATE tasks SET title = ?, description = ?, completed = ? WHERE id = ?';
-	db.query(sqlUpdate, [title, description, completed, id], (error, result) => {
+	db.run(sqlUpdate, [title, description, completed, id], function(error) {
 		if (error) {
 			console.log(error);
-		}
-		res.send(result);
+            res.status(500).json({ error: 'Internal server error' });
+		} else {
+		    res.send({ success: true });
+        }
 	});
 });
+
 // to update the checkbox for completed task
 app.put('/api/updateCompleted/:id', (req, res) => {
 	const { id } = req.params;
 	const { completed } = req.body;
 	const sqlUpdate = 'UPDATE tasks SET completed = ? WHERE id = ?';
-	db.query(sqlUpdate, [completed, id], (error, result) => {
+	db.run(sqlUpdate, [completed, id], function(error) {
 		if (error) {
 			console.log(error);
 			res.status(500).json({ error: 'Internal server error' });
 		} else {
-			res.send(result);
+			res.send({ success: true });
 		}
 	});
 });
 
 app.get('/', (req, res) => {
-	const sqlInsert =
-		"INSERT INTO tasks (title, description, completed) VALUES ('Task one', 'Task one demo Description', 0)";
-	db.query(sqlInsert, (error, result) => {
-		console.log('error', error);
-		console.log('result', result);
-		res.send('Hello World');
-	});
+	res.send('Server is running');
 });
 
-app.listen(5000, (req, res) => {
+app.listen(5000, () => {
 	console.log('running on port 5000');
 });

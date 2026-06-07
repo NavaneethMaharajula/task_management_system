@@ -12,26 +12,42 @@ const initialState = {
 
 const AddTask = () => {
 	const [task, setTask] = useState(initialState);
+	const [loading, setLoading] = useState(false);
 
-	const { title, description, completed } = task;
+	const { title, description, completed } = task || {};
 	const navigate = useNavigate();
 	const { id } = useParams();
 
 	useEffect(() => {
-		axios
-			.get(`http://localhost:5000/api/get/${id}`)
-			.then((resp) => {
-				const data = resp.data;
-				if (data && data.length > 0) {
-					setTask(data[0]);
-				} else {
-					console.error('No task found with the provided ID');
-				}
-			})
-			.catch((err) => {
-				console.error('Error fetching task:', err);
-			});
-	}, [id]);
+		if (id) {
+			setLoading(true);
+			axios
+				.get(`http://localhost:5000/api/get/${id}`)
+				.then((resp) => {
+					const data = resp.data;
+					if (Array.isArray(data) && data.length > 0 && data[0]) {
+						setTask({
+							title: data[0].title || '',
+							description: data[0].description || '',
+							completed: data[0].completed || false
+						});
+					} else {
+						console.error('No task found with the provided ID');
+						toast.error('Task not found');
+						navigate('/');
+					}
+				})
+				.catch((err) => {
+					console.error('Error fetching task:', err);
+					toast.error('Failed to load task details');
+				})
+				.finally(() => {
+					setLoading(false);
+				});
+		} else {
+			setTask(initialState);
+		}
+	}, [id, navigate]);
 
 	const handleSubmit = (e) => {
 		e.preventDefault();
@@ -47,11 +63,14 @@ const AddTask = () => {
 					})
 					.then(() => {
 						setTask(initialState);
+						toast.success('Task added successfully');
+						setTimeout(() => {
+							navigate('/');
+						}, 500);
 					})
 					.catch((err) => {
-						toast.error(err.response.data);
+						toast.error(err.response?.data?.error || 'Failed to add task');
 					});
-				toast.success('Task added successfully');
 			} else {
 				axios
 					.put(`http://localhost:5000/api/update/${id}`, {
@@ -61,23 +80,26 @@ const AddTask = () => {
 					})
 					.then(() => {
 						setTask(initialState);
+						toast.success('Task updated successfully');
+						setTimeout(() => {
+							navigate('/');
+						}, 500);
 					})
 					.catch((err) => {
-						toast.error(err.response.data);
+						toast.error(err.response?.data?.error || 'Failed to update task');
 					});
-				toast.success('Task updated successfully');
 			}
-
-			setTimeout(() => {
-				navigate('/');
-			}, 500);
 		}
 	};
 
 	const handleInputChange = (e) => {
 		const { name, value } = e.target;
-		setTask({ ...task, [name]: value });
+		setTask((prevTask) => ({ ...prevTask, [name]: value }));
 	};
+
+	if (loading) {
+		return <div style={{ marginTop: '100px', textAlign: 'center' }}>Loading task details...</div>;
+	}
 
 	return (
 		<div style={{ marginTop: '100px' }}>
@@ -99,7 +121,7 @@ const AddTask = () => {
 					value={title || ''}
 					onChange={handleInputChange}
 				/>
-				<label htmlFor='title'>Description</label>
+				<label htmlFor='description'>Description</label>
 				<input
 					type='text'
 					id='description'
